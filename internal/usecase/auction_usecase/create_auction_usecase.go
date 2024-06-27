@@ -2,10 +2,13 @@ package auction_usecase
 
 import (
 	"context"
+	"fullcycle-auction_go/configuration/logger"
 	"fullcycle-auction_go/internal/entity/auction_entity"
 	"fullcycle-auction_go/internal/entity/bid_entity"
 	"fullcycle-auction_go/internal/internal_error"
 	"fullcycle-auction_go/internal/usecase/bid_usecase"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -34,10 +37,21 @@ type WinningInfoOutputDTO struct {
 func NewAuctionUseCase(
 	auctionRepositoryInterface auction_entity.AuctionRepositoryInterface,
 	bidRepositoryInterface bid_entity.BidEntityRepository) AuctionUseCaseInterface {
-	return &AuctionUseCase{
+
+	interval := getCompleteBatchAuctionInterval()
+	batchSize := getMaxBatchSize()
+
+	auctionusecase := &AuctionUseCase{
 		auctionRepositoryInterface: auctionRepositoryInterface,
 		bidRepositoryInterface:     bidRepositoryInterface,
+		completeTimeInterval:       interval,
+		timer:                      time.NewTimer(interval),
+		maxAuctionBatchSize: batchSize,
+		auctionChannel:             make(chan auction_entity.Auction),
 	}
+
+	auctionusecase.triggerCompleteAuctionsRoutine(context.Background())
+	return auctionusecase
 }
 
 type AuctionUseCaseInterface interface {
@@ -64,6 +78,52 @@ type AuctionStatus int64
 type AuctionUseCase struct {
 	auctionRepositoryInterface auction_entity.AuctionRepositoryInterface
 	bidRepositoryInterface     bid_entity.BidEntityRepository
+	completeTimeInterval       time.Duration
+	timer                      *time.Timer
+	maxAuctionBatchSize        int
+	auctionChannel             chan auction_entity.Auction
+}
+
+var auctionBatch []auction_entity.Auction
+
+const maxAuctionBatchSize = 5
+
+func (au *AuctionUseCase) triggerCompleteAuctionsRoutine(ctx context.Context) {
+	go func() {
+		defer close(au.auctionChannel)
+
+		for {
+			select {
+			case auctionEntity, ok := <-au.auctionChannel:
+				if !ok {
+					if len(auctionBatch) > 0 {
+						if err := au.auctionRepositoryInterface.CompleteAuctions(ctx, auctionBatch); err != nil {
+							logger.Error("error trying to complete auctions batch", err)
+						}
+					}
+					return
+				}
+
+				auctionBatch = append(auctionBatch, auctionEntity)
+
+				if len(auctionBatch) >= maxAuctionBatchSize {
+					if err := au.auctionRepositoryInterface.CompleteAuctions(ctx, auctionBatch); err != nil {
+						logger.Error("error trying to complete auctions batch", err)
+					}
+
+					auctionBatch = nil
+					au.timer.Reset(au.completeTimeInterval)
+				}
+			case <-au.timer.C:
+				if err := au.auctionRepositoryInterface.CompleteAuctions(ctx, auctionBatch); err != nil {
+					logger.Error("error trying to complete auctions batch", err)
+				}
+				auctionBatch = nil
+				au.timer.Reset(au.completeTimeInterval)
+			}
+
+		}
+	}()
 }
 
 func (au *AuctionUseCase) CreateAuction(
@@ -83,5 +143,25 @@ func (au *AuctionUseCase) CreateAuction(
 		return err
 	}
 
+	au.auctionChannel <- *auction
 	return nil
+}
+
+func getCompleteBatchAuctionInterval() time.Duration {
+	interval := os.Getenv("AUCTION_INTERVAL")
+	duration, err := time.ParseDuration(interval)
+	if err != nil {
+		return 3 * time.Minute
+	}
+
+	return duration
+}
+
+func getMaxBatchSize() int {
+	batchSize, err := strconv.Atoi(os.Getenv("COMPLETE_AUCTION_BATCH_SIZE"))
+	if err != nil {
+		return 10
+	}
+
+	return batchSize
 }
