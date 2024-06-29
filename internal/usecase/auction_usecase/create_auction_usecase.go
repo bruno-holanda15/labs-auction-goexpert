@@ -46,7 +46,7 @@ func NewAuctionUseCase(
 		bidRepositoryInterface:     bidRepositoryInterface,
 		completeTimeInterval:       interval,
 		timer:                      time.NewTimer(interval),
-		maxAuctionBatchSize: batchSize,
+		maxAuctionBatchSize:        batchSize,
 		auctionChannel:             make(chan auction_entity.Auction),
 	}
 
@@ -86,8 +86,6 @@ type AuctionUseCase struct {
 
 var auctionBatch []auction_entity.Auction
 
-const maxAuctionBatchSize = 5
-
 func (au *AuctionUseCase) triggerCompleteAuctionsRoutine(ctx context.Context) {
 	go func() {
 		defer close(au.auctionChannel)
@@ -103,10 +101,9 @@ func (au *AuctionUseCase) triggerCompleteAuctionsRoutine(ctx context.Context) {
 					}
 					return
 				}
-
 				auctionBatch = append(auctionBatch, auctionEntity)
 
-				if len(auctionBatch) >= maxAuctionBatchSize {
+				if len(auctionBatch) >= au.maxAuctionBatchSize {
 					if err := au.auctionRepositoryInterface.CompleteAuctions(ctx, auctionBatch); err != nil {
 						logger.Error("error trying to complete auctions batch", err)
 					}
@@ -119,6 +116,7 @@ func (au *AuctionUseCase) triggerCompleteAuctionsRoutine(ctx context.Context) {
 					logger.Error("error trying to complete auctions batch", err)
 				}
 				auctionBatch = nil
+
 				au.timer.Reset(au.completeTimeInterval)
 			}
 
