@@ -22,8 +22,31 @@ services:
       - cmd/auction/.env
     volumes:
       - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
     networks:
       - localNetwork
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    restart: always
+    env_file:
+      - cmd/auction/.env
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_SERVER: 'mongodb'
+      ME_CONFIG_BASICAUTH_USERNAME: brunin
+      ME_CONFIG_BASICAUTH_PASSWORD: senha
+    ports:
+      - 8081:8081
+    networks:
+      - localNetwork
+    depends_on:
+      - mongodb
 
 volumes:
   mongo-data:
