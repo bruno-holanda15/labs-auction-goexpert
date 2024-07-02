@@ -43,7 +43,7 @@ func (b *Bid) Validate() *internal_error.InternalError {
 	return nil
 }
 
-type BidEntityRepository interface {
+type BidEntityRepositoryInterface interface {
 	CreateBid(
 		ctx context.Context,
 		bidEntities []Bid) *internal_error.InternalError

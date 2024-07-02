@@ -36,7 +36,7 @@ type WinningInfoOutputDTO struct {
 
 func NewAuctionUseCase(
 	auctionRepositoryInterface auction_entity.AuctionRepositoryInterface,
-	bidRepositoryInterface bid_entity.BidEntityRepository) AuctionUseCaseInterface {
+	bidRepositoryInterface bid_entity.BidEntityRepositoryInterface) AuctionUseCaseInterface {
 
 	interval := getCompleteBatchAuctionInterval()
 	batchSize := getMaxBatchSize()
@@ -77,7 +77,7 @@ type AuctionStatus int64
 
 type AuctionUseCase struct {
 	auctionRepositoryInterface auction_entity.AuctionRepositoryInterface
-	bidRepositoryInterface     bid_entity.BidEntityRepository
+	bidRepositoryInterface     bid_entity.BidEntityRepositoryInterface
 	completeTimeInterval       time.Duration
 	timer                      *time.Timer
 	maxAuctionBatchSize        int
